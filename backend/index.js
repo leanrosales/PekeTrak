@@ -4,7 +4,8 @@ const cors = require("cors");
 const viajesRutas = require("./src/routes/viajeRutas");
 
 const app = express();
-const PUERTO = 3000;
+const PUERTO = 999;
+//cambie el puerto aver que carajos pasa
 
 app.use(cors());
 app.use(express.json());
