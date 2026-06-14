@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Peke Trak - Dashboard</title>
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: { sans: ["Inter", "sans-serif"] },
+            colors: {
+              "peke-bg": "#597E78",
+              "peke-card": "#6B8E89",
+              "peke-dark": "#2D4B46",
+              "peke-gray": "#F3F4F6",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      #map {
+        height: 400px;
+        width: 100%;
+        z-index: 1;
+        border-radius: 0.75rem;
+      }
+
+      /* Pulso suave para el indicador de estado en vivo */
+      @keyframes pulso-vivo {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+      .indicador-vivo {
+        animation: pulso-vivo 1.8s ease-in-out infinite;
+      }
+
+      /* Pequeña transición al actualizar valores del dashboard */
+      #ui-eta,
+      #ui-vel,
+      #estado-viaje {
+        transition:
+          color 0.4s ease,
+          transform 0.3s ease;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-peke-bg text-gray-800 font-sans min-h-screen flex flex-col relative overflow-hidden"
+  >
+    <div
+      id="login-screen"
+      class="absolute inset-0 bg-peke-bg z-40 flex flex-col items-center justify-center p-4"
+    >
+      <div
+        class="w-full max-w-sm bg-white rounded-2xl shadow-xl p-8 flex flex-col items-center"
+      >
+        <div class="bg-peke-dark p-3 rounded-xl mb-4">
+          <svg
+            class="w-8 h-8 text-white"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+            ></path>
+          </svg>
+        </div>
+        <h1 class="text-2xl font-extrabold text-peke-dark mb-1">PEKETRAK</h1>
+        <p class="text-sm text-gray-500 mb-8">Acceso seguro para tutores</p>
+
+        <input
+          type="email"
+          id="email"
+          value="matias.padre@lasalle.edu"
+          class="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 mb-4 text-gray-800 font-medium focus:ring-2 focus:ring-peke-bg outline-none"
+        />
+        <input
+          type="password"
+          id="password"
+          value="123456"
+          class="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 mb-2 text-gray-800 font-medium focus:ring-2 focus:ring-peke-bg outline-none"
+        />
+
+        <p id="error-msg" class="text-red-500 text-sm font-bold mb-4 hidden">
+          Correo o contraseña incorrectos.
+        </p>
+
+        <button
+          onclick="iniciarSesion()"
+          class="w-full bg-peke-dark hover:bg-peke-bg text-white font-bold py-3 rounded-lg transition-colors duration-300 shadow-md"
+        >
+          Ingresar al Dashboard
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="dashboard-screen"
+      class="hidden flex-1 w-full max-w-7xl mx-auto flex flex-col"
+    >
+      <nav
+        class="bg-white px-6 py-4 flex justify-between items-center shadow-sm rounded-b-xl"
+      >
+        <div class="flex items-center gap-2">
+          <div class="bg-peke-dark p-1.5 rounded-md text-white">
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+              ></path>
+            </svg>
+          </div>
+          <span class="font-extrabold text-peke-dark text-xl tracking-tight"
+            >PEKETRAK</span
+          >
+        </div>
+
+        <div class="flex items-center gap-4">
+          <div
+            class="hidden sm:flex items-center gap-2 bg-peke-gray px-3 py-1.5 rounded-full"
+          >
+            <span
+              class="w-2.5 h-2.5 rounded-full bg-green-500 indicador-vivo"
+            ></span>
+            <span class="text-xs font-bold text-peke-dark uppercase">
+              Monitoreo en vivo
+            </span>
+          </div>
+
+          <button
+            onclick="cerrarSesion()"
+            class="flex items-center gap-2 text-peke-dark font-semibold hover:text-gray-600 transition"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              ></path>
+            </svg>
+            Salir
+          </button>
+        </div>
+      </nav>
+
+      <div class="flex-1 p-4 grid grid-cols-1 md:grid-cols-12 gap-6">
+        <aside class="md:col-span-4 flex flex-col gap-4">
+          <div
+            class="bg-white p-5 rounded-2xl shadow-sm mt-2 border-t-4 border-peke-dark"
+          >
+            <h3 class="font-extrabold text-peke-dark text-xl mb-2">Hijo</h3>
+
+            <div
+              class="flex justify-between items-center bg-peke-card text-white py-2 px-3 rounded-xl mb-4"
+            >
+              <span class="font-bold">Matías Aranibar</span>
+              <span
+                id="estado-viaje"
+                class="text-xs font-bold bg-white text-peke-dark px-2 py-1 rounded"
+                >Esperando...</span
+              >
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase">
+                  Colegio
+                </p>
+                <p class="font-bold text-sm text-peke-dark">
+                  Colegio La Salle - Cochabamba
+                </p>
+              </div>
+              <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase">
+                  Domicilio
+                </p>
+                <div
+                  class="bg-peke-dark text-white font-bold py-1 px-2 rounded-lg text-xs inline-block"
+                >
+                  Av. Villarroel Esq. Beni
+                </div>
+              </div>
+              <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase">
+                  Trayecto Actual
+                </p>
+                <p class="font-bold text-sm text-peke-dark" id="ui-trayecto">
+                  Sin iniciar
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="bg-white p-5 rounded-2xl shadow-sm flex items-center justify-between"
+          >
+            <div>
+              <p class="text-gray-500 font-semibold text-xs uppercase">ETA</p>
+              <div class="flex items-baseline gap-1">
+                <span class="text-4xl font-black text-peke-dark" id="ui-eta"
+                  >--</span
+                >
+                <span class="text-sm font-bold text-peke-dark">min</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="text-gray-500 font-semibold text-xs uppercase">
+                Velocidad
+              </p>
+              <p class="text-xl font-black text-blue-600">
+                <span id="ui-vel">0</span> km/h
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        <main class="md:col-span-8">
+          <div
+            class="bg-peke-gray p-2 rounded-2xl shadow-md border-4 border-white mb-4"
+          >
+            <div id="map"></div>
+          </div>
+          <div
+            class="bg-peke-card text-white p-4 rounded-xl shadow-sm flex justify-between items-center"
+          >
+            <div>
+              <p class="text-[10px] font-semibold uppercase">Bus</p>
+              <p class="font-bold">BUS-001</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] font-semibold uppercase">
+                Última Transmisión
+              </p>
+              <p class="font-bold" id="ui-time">--:--</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      let map, busMarker, intervalID;
+      let ultimoIdProcesado = 0; // El frontend recordará qué notificación ya mostró
+
+      // 1. LÓGICA DE LOGIN
+      async function iniciarSesion() {
+        document.getElementById("login-screen").classList.add("hidden");
+        document.getElementById("dashboard-screen").classList.remove("hidden");
+        document.getElementById("dashboard-screen").classList.add("flex");
+        if (!map) initMap();
+        intervalID = setInterval(sincronizarDashboard, 1500);
+      }
+
+      function cerrarSesion() {
+        document.getElementById("dashboard-screen").classList.add("hidden");
+        document.getElementById("dashboard-screen").classList.remove("flex");
+        document.getElementById("login-screen").classList.remove("hidden");
+        clearInterval(intervalID);
+      }
+
+      // 2. INICIALIZAR EL MAPA
+      // Centrado entre el domicilio (Villarroel/Beni) y el Colegio La Salle
+      function initMap() {
+        map = L.map("map").setView([-17.38, -66.157], 14);
+
+        L.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+          {
+            attribution: "© PekeTrak Maps",
+          },
+        ).addTo(map);
+
+        // Marcadores fijos: domicilio y colegio
+        const iconoCasa = L.divIcon({
+          html: '<div style="font-size: 26px; line-height: 26px; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.5));">🏠</div>',
+          className: "",
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        });
+
+        const iconoColegio = L.divIcon({
+          html: '<div style="font-size: 26px; line-height: 26px; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.5));">🏫</div>',
+          className: "",
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        });
+
+        L.marker([-17.3705, -66.153], { icon: iconoCasa })
+          .addTo(map)
+          .bindPopup("Domicilio - Av. Villarroel Esq. Beni");
+
+        L.marker([-17.3893424, -66.160814], { icon: iconoColegio })
+          .addTo(map)
+          .bindPopup("Colegio La Salle - Cochabamba");
+
+        // Icono del bus
+        const busIcon = L.divIcon({
+          html: '<div style="font-size: 32px; line-height: 32px; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.5));">🚌</div>',
+          className: "",
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+
+        busMarker = L.marker([-17.3705, -66.153], { icon: busIcon }).addTo(map);
+      }
+
+      // 3. SISTEMA DE ALERTAS (SWEETALERT2)
+      function mostrarAlerta(tipo) {
+        let config = {};
+
+        switch (tipo) {
+          // ---------- TRAYECTO DE IDA (Casa -> Colegio) ----------
+          case "abordaje":
+            config = {
+              title: "¡Estudiante a bordo!",
+              text: "La manilla RFID confirmó el ingreso. Inicia el trayecto al colegio.",
+              icon: "success",
+              color: "#11CAA0",
+              estado: "Abordó 🎒",
+              trayecto: "Casa ➜ Colegio",
+            };
+            break;
+
+          case "arranca":
+            config = {
+              title: "¡Bus en movimiento!",
+              text: "La ruta hacia el Colegio La Salle ha comenzado.",
+              icon: "info",
+              color: "#F39C12",
+              estado: "En Ruta al Colegio 🚌",
+              trayecto: "Casa ➜ Colegio",
+            };
+            break;
+
+          case "casi_llega":
+            config = {
+              title: "¡Aproximación al Colegio!",
+              text: "El bus está a punto de llegar al Colegio La Salle.",
+              icon: "warning",
+              color: "#E74C3C",
+              estado: "Llegando al Colegio 📍",
+              trayecto: "Casa ➜ Colegio",
+            };
+            break;
+
+          case "destino":
+            config = {
+              title: "¡Llegó al Colegio!",
+              text: "Matías ha llegado seguro al Colegio La Salle.",
+              icon: "success",
+              color: "#005088",
+              estado: "En el Colegio 🏫",
+              trayecto: "Finalizado",
+            };
+            break;
+
+          // ---------- TRAYECTO DE VUELTA (Colegio -> Casa) ----------
+          case "abordaje_vuelta":
+            config = {
+              title: "¡Estudiante a bordo para el regreso!",
+              text: "La manilla RFID confirmó el ingreso. Inicia el trayecto a casa.",
+              icon: "success",
+              color: "#11CAA0",
+              estado: "Abordó (Regreso) 🎒",
+              trayecto: "Colegio ➜ Casa",
+            };
+            break;
+
+          case "arranca_vuelta":
+            config = {
+              title: "¡Bus en camino a casa!",
+              text: "La ruta de regreso hacia Av. Villarroel Esq. Beni ha comenzado.",
+              icon: "info",
+              color: "#F39C12",
+              estado: "En Ruta a Casa 🚌",
+              trayecto: "Colegio ➜ Casa",
+            };
+            break;
+
+          case "casi_llega_casa":
+            config = {
+              title: "¡Aproximación al domicilio!",
+              text: "El bus está a punto de llegar a Av. Villarroel Esq. Beni.",
+              icon: "warning",
+              color: "#E74C3C",
+              estado: "Llegando a Casa 📍",
+              trayecto: "Colegio ➜ Casa",
+            };
+            break;
+
+          case "llego_casa":
+            config = {
+              title: "¡Llegó a Casa!",
+              text: "Matías ha llegado seguro a Av. Villarroel Esq. Beni.",
+              icon: "success",
+              color: "#005088",
+              estado: "En Casa 🏠",
+              trayecto: "Finalizado",
+            };
+            break;
+        }
+
+        if (config.title) {
+          Swal.fire({
+            title: config.title,
+            text: config.text,
+            icon: config.icon,
+            confirmButtonColor: config.color,
+            timer: 5000,
+            showConfirmButton: false,
+          });
+
+          const estadoViaje = document.getElementById("estado-viaje");
+          if (estadoViaje) {
+            estadoViaje.innerText = config.estado;
+            estadoViaje.style.color = config.color;
+          }
+
+          const trayecto = document.getElementById("ui-trayecto");
+          if (trayecto && config.trayecto) {
+            trayecto.innerText = config.trayecto;
+          }
+        }
+      }
+
+      // 4. EL MOTOR DE SINCRONIZACIÓN (BLINDADO CONTRA CACHÉ)
+      async function sincronizarDashboard() {
+        try {
+          // A. EVENTOS RFID (A prueba de Caché de Chrome)
+          const urlEstado =
+            "http://localhost:3000/api/viajes/rfid/estado?t=" +
+            new Date().getTime();
+
+          const resEvento = await fetch(urlEstado, { cache: "no-store" });
+          if (resEvento.ok) {
+            const dataEvento = await resEvento.json();
+
+            let tipoNotificacion = dataEvento.tipo || dataEvento.evento;
+            let idNotificacion = dataEvento.id || tipoNotificacion;
+
+            if (
+              tipoNotificacion &&
+              tipoNotificacion !== "null" &&
+              idNotificacion !== ultimoIdProcesado
+            ) {
+              ultimoIdProcesado = idNotificacion;
+              mostrarAlerta(tipoNotificacion);
+            }
+          }
+
+          // B. CONSULTAR GPS
+          const urlGps =
+            "http://localhost:3000/api/viajes/actual?t=" + new Date().getTime();
+          const resUbicacion = await fetch(urlGps, { cache: "no-store" });
+          if (resUbicacion.ok) {
+            const dataUbicacion = await resUbicacion.json();
+
+            if (
+              dataUbicacion.estado_viaje &&
+              dataUbicacion.estado_viaje.latitud
+            ) {
+              const { latitud, longitud, velocidad_kmh, timestamp } =
+                dataUbicacion.estado_viaje;
+
+              document.getElementById("ui-vel").innerText = velocidad_kmh;
+              document.getElementById("ui-time").innerText = new Date(
+                timestamp,
+              ).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              });
+
+              const nuevaPosicion = [latitud, longitud];
+              busMarker.setLatLng(nuevaPosicion);
+              map.panTo(nuevaPosicion);
+
+              let eta =
+                velocidad_kmh > 40
+                  ? 5
+                  : velocidad_kmh < 25 && velocidad_kmh > 0
+                    ? 2
+                    : velocidad_kmh === 0
+                      ? 0
+                      : 8;
+              document.getElementById("ui-eta").innerText = eta;
+            }
+          }
+        } catch (error) {
+          console.log("Sincronizando con el servidor...");
+        }
+      }
+    </script>
+  </body>
+</html>
